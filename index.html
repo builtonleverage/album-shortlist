@@ -118,6 +118,16 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
     <label for="evName">New event name<input id="evName" type="text" placeholder="Mehndi" autocomplete="off" required></label>
     <button class="primary" type="submit">Add event</button>
   </form>
+  <div id="sync" class="card">
+    <div class="row"><h2>Progress online</h2><button id="sRefresh" class="quiet">Refresh</button></div>
+    <p id="sMsg" class="muted small" style="margin:0"></p>
+    <div id="sView" class="events"></div>
+    <textarea id="sText" readonly hidden aria-label="Chosen file names by event"></textarea>
+    <form id="sForm" class="new">
+      <label for="sToken">GitHub token, needed on the picking iPad to save progress online<input id="sToken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <button type="submit">Save token</button>
+    </form>
+  </div>
 </main>
 
 <main id="manage" hidden>
@@ -232,6 +242,75 @@ var toastT;
 function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2600);}
 function show(id){['home','manage','viewer','review'].forEach(function(v){$('#'+v).hidden=(v!==id)});window.scrollTo(0,0);}
 
+/* ---------- online progress (GitHub, branch "data") ---------- */
+var GH='https://api.github.com/repos/builtonleverage/album-shortlist/contents/progress.json';
+var token='', sha=null, syncT=null, dirty=false, lastPushed='', lastSync=null, remote=null, remoteErr='';
+try{token=localStorage.getItem('ghToken')||''}catch(e){}
+function hdr(){var h={'Accept':'application/vnd.github+json'}; if(token) h.Authorization='Bearer '+token; return h;}
+function b64(t){return btoa(unescape(encodeURIComponent(t)))}
+function snapshot(){
+  return {albumTarget:albumTarget,events:events.map(function(ev){var l=ofEvent(ev.id);
+    return {name:ev.name,total:l.length,seen:l.filter(function(p){return p.seen}).length,
+      kept:l.filter(function(p){return p.kept}).map(function(p){return p.name}),
+      onDisk:l.filter(function(p){return p.kept&&p.onDisk}).map(function(p){return p.name}),
+      removed:l.filter(function(p){return !p.kept&&p.onDisk}).map(function(p){return p.name})};})};
+}
+async function fetchRemote(){
+  var r=await fetch(GH+'?ref=data&t='+Date.now(),{headers:hdr(),cache:'no-store'});
+  if(!r.ok) throw new Error(r.status===404?'not found or private':'error '+r.status);
+  var j=await r.json(); sha=j.sha;
+  return JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\s/g,'')))));
+}
+async function pushNow(){
+  clearTimeout(syncT); syncT=null;
+  if(!token||!dirty) return;
+  var snap=snapshot(), body0=JSON.stringify(snap);
+  if(body0===lastPushed){dirty=false;return;}
+  snap.updated=new Date().toISOString();
+  try{
+    if(!sha){ try{await fetchRemote()}catch(e){} }
+    var send=function(){var b={message:'Update progress',branch:'data',content:b64(JSON.stringify(snap,null,1))}; if(sha) b.sha=sha;
+      return fetch(GH,{method:'PUT',headers:hdr(),body:JSON.stringify(b)});};
+    var r=await send();
+    if(r.status===409||r.status===422){ sha=null; try{await fetchRemote()}catch(e){} r=await send(); }
+    if(!r.ok) throw new Error(r.status===401||r.status===403?'token not accepted':'error '+r.status);
+    sha=(await r.json()).content.sha; lastPushed=body0; dirty=false; lastSync=new Date(); remoteErr='';
+  }catch(e){ remoteErr='Could not save online: '+e.message+'. It will try again.'; }
+  renderSync();
+}
+function queueSync(){ dirty=true; if(token&&!syncT) syncT=setTimeout(pushNow,60000); }
+function flushSync(){ if(dirty&&token) pushNow(); }
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden') flushSync(); });
+function renderSync(){
+  var picker=events.length>0, msg=$('#sMsg'), v=$('#sView');
+  $('#album').hidden=!picker&&!!remote;
+  $('#sToken').placeholder=token?'Token saved on this device':'Paste token';
+  if(picker){
+    $('#sRefresh').hidden=true; v.innerHTML=''; $('#sText').hidden=true;
+    msg.textContent=remoteErr||(!token?'Paste a GitHub token below to save progress online, so it can be checked from any phone or computer.':
+      (lastSync?'Saved online at '+lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.':'Progress is saved online about a minute after each change.'));
+    return;
+  }
+  $('#sRefresh').hidden=false;
+  if(!remote){ msg.textContent=remoteErr?'Could not load the saved progress ('+remoteErr+').':'Loading saved progress…'; v.innerHTML=''; return; }
+  var tot=remote.events.reduce(function(a,e){return a+e.kept.length},0);
+  msg.innerHTML='From the picking iPad, updated '+esc(remote.updated?new Date(remote.updated).toLocaleString():'never')+'.';
+  v.innerHTML='<div class="stats"><b>'+tot+'</b> of '+(remote.albumTarget||250)+' photos chosen for the album</div>'+
+    remote.events.map(function(e){return '<div class="row"><span>'+esc(e.name)+'</span><span class="stats muted">'+e.kept.length+' chosen · '+e.seen+' of '+e.total+' seen</span></div>'}).join('')+
+    (remote.events.length?'<div class="btns"><button id="sNames">Show chosen file names</button></div>':'<span class="muted">Nothing has been picked yet.</span>');
+}
+function loadRemote(){ return fetchRemote().then(function(d){remote=d;remoteErr='';}).catch(function(e){remoteErr=e.message;}).then(renderSync); }
+$('#sRefresh').addEventListener('click',function(){remote=null;remoteErr='';renderSync();loadRemote();});
+$('#sView').addEventListener('click',function(e){
+  if(!e.target.closest('#sNames')||!remote) return;
+  var x=$('#sText'); x.value=remote.events.map(function(ev){return ev.name+' ('+ev.kept.length+')\n'+ev.kept.join('\n')}).join('\n\n'); x.hidden=false;
+});
+$('#sForm').addEventListener('submit',function(e){
+  e.preventDefault(); var t=$('#sToken').value.trim(); if(!t) return;
+  token=t; try{localStorage.setItem('ghToken',t)}catch(err){} $('#sToken').value=''; sha=null;
+  toast('Token saved'); if(events.length){dirty=true;pushNow();} else loadRemote();
+});
+
 /* ---------- home ---------- */
 function totalKept(){return photos.filter(function(p){return p.kept}).length}
 function renderAlbum(){
@@ -244,10 +323,10 @@ function renderAlbum(){
 $('#aEdit').addEventListener('click',function(){var f=$('#aForm');f.hidden=!f.hidden;$('#aTarget').value=albumTarget;});
 $('#aForm').addEventListener('submit',function(e){
   e.preventDefault(); var n=parseInt($('#aTarget').value,10); if(!(n>0)) return;
-  albumTarget=n; put('blobs',{target:n},'settings').catch(function(){}); $('#aForm').hidden=true; renderAlbum(); toast('Album total saved');
+  albumTarget=n; put('blobs',{target:n},'settings').catch(function(){}); $('#aForm').hidden=true; renderAlbum(); toast('Album total saved'); queueSync();
 });
 function renderHome(){
-  renderAlbum();
+  renderAlbum(); renderSync();
   var box=$('#events');
   if(!events.length){box.innerHTML='<div class="card"><strong>No events yet.</strong><span class="muted">Add the first event below, for example Mehndi, then load its photos from the disk.</span></div>';return;}
   box.innerHTML=events.map(function(ev){
@@ -286,7 +365,7 @@ function openManage(id){
 function renderManage(){
   var s=stat(manageId);
   $('#mStats').textContent=s.total+' photos loaded · '+s.kept+' kept · '+s.fresh+' new picks not yet on the disk';
-  renderExport();
+  renderExport(); queueSync();
 }
 $('#mBack').addEventListener('click',function(){renderHome();show('home')});
 
@@ -314,6 +393,9 @@ $('#mAdd').addEventListener('change',async function(){
   var evId=manageId, added=0, relinked=0, bad=0, full=false;
   var prog=$('#mProg'), txt=$('#mProgText'); prog.hidden=false; txt.hidden=false; prog.max=files.length;
   var have=new Set(photos.filter(function(p){return p.event===evId}).map(function(p){return p.id}));
+  var evNow=events.find(function(x){return x.id===evId}), rk=new Set(), rd=new Set();
+  ((remote&&remote.events)||[]).forEach(function(e){ if(evNow&&e.name.toLowerCase()===evNow.name.toLowerCase()){
+    e.kept.forEach(function(n){rk.add(n.toLowerCase())}); (e.onDisk||[]).forEach(function(n){rd.add(n.toLowerCase())}); }});
   for(var i=0;i<files.length;i++){
     var f=files[i], id=pid(evId,f.name);
     prog.value=i+1; txt.textContent='Preparing '+(i+1)+' of '+files.length+': '+f.name;
@@ -321,7 +403,7 @@ $('#mAdd').addEventListener('change',async function(){
     if(have.has(id)){relinked++;continue;}
     try{
       var pv=await makePreviews(f);
-      var rec={id:id,event:evId,name:f.name,kept:false,onDisk:false,seen:false};
+      var lk=f.name.toLowerCase(), rec={id:id,event:evId,name:f.name,kept:rk.has(lk),onDisk:rd.has(lk),seen:false};
       try{ await put('blobs',pv.p,id+'#p'); await put('blobs',pv.t,id+'#t'); await put('photos',rec); }
       catch(e){ full=true; originals.delete(id); break; }
       photos.push(rec); have.add(id); added++;
@@ -403,7 +485,7 @@ $('#mDelete').addEventListener('click',async function(){
   for(var i=0;i<l.length;i++){ try{await del('blobs',l[i].id+'#p');await del('blobs',l[i].id+'#t');await del('photos',l[i].id);}catch(e){} originals.delete(l[i].id); }
   try{await del('events',id)}catch(e){}
   photos=photos.filter(function(p){return p.event!==id}); events=events.filter(function(e){return e.id!==id});
-  renderHome(); show('home'); toast('Event removed from this iPad');
+  renderHome(); show('home'); toast('Event removed from this iPad'); queueSync();
 });
 
 /* ---------- viewer ---------- */
@@ -453,7 +535,7 @@ function step(d){
 }
 function toggleKeep(){
   if(!cur||!$('#vEnd').hidden) return;
-  var p=cur.list[cur.idx]; p.kept=!p.kept; put('photos',p).catch(function(){toast('Could not save this pick')}); paintMeta();
+  var p=cur.list[cur.idx]; p.kept=!p.kept; put('photos',p).catch(function(){toast('Could not save this pick')}); paintMeta(); queueSync();
 }
 $('#vPrev').addEventListener('click',function(){step(-1)});
 $('#vNext').addEventListener('click',function(){step(1)});
@@ -461,7 +543,7 @@ $('#vKeep').addEventListener('click',toggleKeep);
 $('#vEndBack').addEventListener('click',function(){$('#vEnd').hidden=true});
 $('#vEndReview').addEventListener('click',openReview);
 $('#vReview').addEventListener('click',openReview);
-$('#vBack').addEventListener('click',function(){cur=null;renderHome();show('home')});
+$('#vBack').addEventListener('click',function(){cur=null;renderHome();show('home');flushSync();});
 document.addEventListener('keydown',function(e){
   if($('#viewer').hidden) return;
   if(e.key==='ArrowRight') step(1); else if(e.key==='ArrowLeft') step(-1);
@@ -506,6 +588,7 @@ openDB().then(async function(d){
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   events.sort(function(a,b){return a.id<b.id?-1:1});
   renderHome();
+  loadRemote();
 });
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 })();
