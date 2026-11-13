@@ -1,10 +1,20 @@
 # Wedding Album Picker
 
-A one-page app for shortlisting wedding photos on an iPad, one event at a time.
+A family app for shortlisting wedding photos, one event at a time.
 
-- Photos are read from an external disk through the file picker. Small previews and the picks are stored in the browser on the iPad.
-- Nothing on the disk is changed until the picks are saved through the share sheet ("Save to Files").
-- No photos are uploaded anywhere. The site is static files only.
-- With a GitHub token saved on the picking iPad, progress (event names, counts and chosen file names) is written to `progress.json` on the `data` branch, and any other device opening the site shows it.
+- **Site** (`index.html`, GitHub Pages): the picking screen. Works on iPad, phone and computer.
+- **Server** (`worker/`, Cloudflare Worker + D1): stores events, a small preview of every photo, and who kept which photo. Every request needs the family password.
 
-Open the site in Safari, then Share > Add to Home Screen.
+How photos flow:
+
+1. On the iPad with the disk, photos are chosen from an event folder. The app makes a large preview kept on that iPad and a small one (about 640 px) sent to the database. Originals never leave the disk.
+2. Anyone with the family link or password browses the photos and presses Keep. Picks are recorded per person.
+3. On the iPad, new picks are saved into the Shortlisted folder on the disk through the share sheet.
+
+## Deploying the server
+
+Cloudflare dashboard > Workers & Pages > Create > import this repository, with root directory `worker` and deploy command `npx wrangler deploy`. `wrangler.toml` already binds the D1 database as `DB`.
+
+Then add a secret named `KEY` (Settings > Variables and Secrets) holding the family password.
+
+The tables are created automatically on first use.

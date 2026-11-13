@@ -1,0 +1,8 @@
+name = "album-shortlist"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "album-shortlist"
+database_id = "36f9fccd-dfc0-401a-9c40-6ec293c20aec"

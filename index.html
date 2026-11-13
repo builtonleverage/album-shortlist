@@ -94,16 +94,40 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
 #toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:var(--text);color:var(--ink);padding:10px 18px;border-radius:999px;font-weight:600;max-width:90%;text-align:center;z-index:9}
 @media (max-width:420px){.vfoot button{font-size:18px;min-height:64px}h1{font-size:26px}}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .3s}}
+.card>.field{flex:0 0 auto}
+button.mini{min-height:0;padding:4px 10px;font-size:15px}
+details.card{display:block}
+details.card summary{cursor:pointer;font-weight:600;min-height:32px}
+details.card>*+*{margin-top:14px}
+#vBadge.dropped{background:var(--warn);color:#2a0d06}
+#vDrop{position:absolute;top:14px;right:14px;background:rgba(11,10,8,.8)}
+#linkBox{margin-top:12px}
+.grid .tag:empty{display:none}
 </style>
 </head>
 <body>
 
-<main id="home">
+<main id="setup" hidden>
+  <div class="top">
+    <h1>Wedding Album Picker</h1>
+    <p class="muted" style="margin:0">Enter your name and the family password to start.</p>
+  </div>
+  <form id="suForm" class="card">
+    <div class="field"><label for="suName">Your name</label><input id="suName" type="text" autocomplete="given-name" required></div>
+    <div class="field"><label for="suKey">Family password</label><input id="suKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" required></div>
+    <div class="field"><label for="suServer">Server address</label><input id="suServer" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://album-shortlist.yourname.workers.dev" required></div>
+    <p id="suMsg" class="small" style="margin:0;color:var(--warn)" hidden></p>
+    <button class="primary" type="submit">Continue</button>
+  </form>
+</main>
+
+<main id="home" hidden>
   <div class="top">
     <h1>Wedding Album Picker</h1>
     <p class="muted" style="margin:0">Choose an event, look at each photo, and press Keep on the ones for the album.</p>
+    <p class="small" style="margin:0">Picking as <b id="meName"></b> <button id="meChange" class="quiet mini">Change</button></p>
   </div>
-  <div id="memBanner" class="banner" hidden>This browser is not saving progress. Keep this page open until the shortlist is saved, or open the page in Safari directly.</div>
+  <div id="netBanner" class="banner" hidden></div>
   <div id="album" class="card">
     <div class="row"><h2>Whole album</h2><span id="aPill" class="pill"></span></div>
     <div class="bar"><i id="aBar"></i></div>
@@ -114,20 +138,16 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
     </form>
   </div>
   <div id="events" class="events"></div>
-  <form id="newEvent" class="new card">
-    <label for="evName">New event name<input id="evName" type="text" placeholder="Mehndi" autocomplete="off" required></label>
-    <button class="primary" type="submit">Add event</button>
-  </form>
-  <div id="sync" class="card">
-    <div class="row"><h2>Progress online</h2><button id="sRefresh" class="quiet">Refresh</button></div>
-    <p id="sMsg" class="muted small" style="margin:0"></p>
-    <div id="sView" class="events"></div>
-    <textarea id="sText" readonly hidden aria-label="Chosen file names by event"></textarea>
-    <form id="sForm" class="new">
-      <label for="sToken">GitHub token, needed on the picking iPad to save progress online<input id="sToken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-      <button type="submit">Save token</button>
+  <details id="admin" class="card">
+    <summary>Set up and family link</summary>
+    <form id="newEvent" class="new">
+      <label for="evName">New event name<input id="evName" type="text" placeholder="Mehndi" autocomplete="off" required></label>
+      <button class="primary" type="submit">Add event</button>
     </form>
-  </div>
+    <div class="btns"><button id="linkCopy">Copy family link</button><button id="signOut" class="quiet">Forget this device</button></div>
+    <input id="linkBox" type="text" readonly hidden aria-label="Family link">
+    <p class="muted small" style="margin:12px 0 0">The family link opens the app with the password filled in. Share it only with family.</p>
+  </details>
 </main>
 
 <main id="manage" hidden>
@@ -135,15 +155,15 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
   <div class="top"><h2 id="mTitle"></h2><p id="mStats" class="muted stats" style="margin:0"></p></div>
   <div class="steps">
     <div class="step">
-      <h3>1. Load this event's photos</h3>
-      <p class="muted small" style="margin:0">Open the event's folder on the disk, choose Select All, then Open. Loading the same folder again adds nothing twice. For a very large event, load a few hundred at a time.</p>
+      <h3>1. Load this event's photos (on the iPad with the disk)</h3>
+      <p class="muted small" style="margin:0">Open the event's folder on the disk, choose Select All, then Open. Each photo gets a large preview kept on this iPad and a small one sent to the family. Loading the same folder again adds nothing twice. For a very large event, load a few hundred at a time.</p>
       <label class="pick" for="mAdd">Choose photos from disk<input id="mAdd" type="file" multiple></label>
       <progress id="mProg" value="0" max="1" hidden></progress>
       <p id="mProgText" class="small muted" style="margin:0" hidden></p>
     </div>
     <div class="step">
       <h3>2. Mark photos already shortlisted</h3>
-      <p class="muted small" style="margin:0">Open this event's Shortlisted folder on the disk and select everything in it. Photos with matching file names get marked as kept and are not saved again.</p>
+      <p class="muted small" style="margin:0">Open this event's Shortlisted folder on the disk and select everything in it. Photos with matching file names count as chosen and are not saved again.</p>
       <label class="pick" for="mMark">Choose shortlisted photos<input id="mMark" type="file" multiple></label>
     </div>
     <div class="step">
@@ -151,11 +171,11 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
       <p id="xInfo" class="muted small" style="margin:0"></p>
       <div id="xBtns" class="btns"></div>
       <div class="btns"><button id="xList">Show file name list</button><button id="xCopy" hidden>Copy list</button></div>
-      <textarea id="xText" readonly hidden aria-label="File names of kept photos"></textarea>
+      <textarea id="xText" readonly hidden aria-label="File names of chosen photos"></textarea>
     </div>
     <div class="step">
-      <h3>Remove this event from the iPad</h3>
-      <p class="muted small" style="margin:0">Deletes the previews and picks stored in this app. Nothing on the disk changes.</p>
+      <h3>Remove this event for everyone</h3>
+      <p class="muted small" style="margin:0">Deletes the event, its small previews and everyone's picks from the family database. Nothing on the disk changes.</p>
       <div class="btns"><button id="mDelete" class="danger">Remove event</button></div>
     </div>
   </div>
@@ -165,15 +185,16 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
   <div class="vbar">
     <button id="vBack" class="quiet">‹ Events</button>
     <div id="vTitle" class="title"></div>
-    <button id="vReview">My picks</button>
+    <button id="vReview">Picks</button>
   </div>
   <div id="stage">
     <img id="vImg" alt="">
-    <div id="vBadge" hidden>✓ Kept</div>
+    <div id="vBadge" hidden></div>
+    <button id="vDrop" class="mini" hidden></button>
     <div id="vEnd" hidden>
       <h2>That was the last photo</h2>
       <p id="vEndText" class="muted" style="margin:0"></p>
-      <div class="btns" style="justify-content:center"><button id="vEndReview" class="primary">See my picks</button><button id="vEndBack">Go back one photo</button></div>
+      <div class="btns" style="justify-content:center"><button id="vEndReview" class="primary">See the picks</button><button id="vEndBack">Go back one photo</button></div>
     </div>
   </div>
   <div class="vmeta"><span id="vPos"></span><span id="vName"></span><span id="vCount"></span></div>
@@ -195,150 +216,179 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
 <script>
 (function(){
 'use strict';
+var DEFAULT_API='';   // the Worker address, once known
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
+var enc=encodeURIComponent, noop=function(){};
 var coll=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
 var CHUNK=30;
+var LS={
+  get:function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
 
-/* ---------- storage: IndexedDB, with an in-memory fallback ---------- */
-var db=null, mem={events:new Map(),photos:new Map(),blobs:new Map()};
+/* ---------- who and where ---------- */
+var cfg=LS.get('ap.cfg',{s:DEFAULT_API,k:'',me:''});
+(function(){
+  var h=location.hash.replace(/^#/,''); if(!h) return;
+  try{var q=new URLSearchParams(h); if(q.get('s')) cfg.s=q.get('s'); if(q.get('k')) cfg.k=q.get('k'); LS.set('ap.cfg',cfg); history.replaceState(null,'',location.pathname);}catch(e){}
+})();
+
+/* ---------- local storage for large previews (this device only) ---------- */
+var db=null, memBlobs=new Map();
 function openDB(){return new Promise(function(res){
   try{
-    var r=indexedDB.open('album-picker',1);
-    r.onupgradeneeded=function(){var d=r.result;
-      d.createObjectStore('events',{keyPath:'id'});
-      d.createObjectStore('photos',{keyPath:'id'}).createIndex('event','event');
-      d.createObjectStore('blobs');};
-    r.onsuccess=function(){res(r.result)};
-    r.onerror=function(){res(null)}; r.onblocked=function(){res(null)};
+    var r=indexedDB.open('album-picker-2',1);
+    r.onupgradeneeded=function(){r.result.createObjectStore('blobs')};
+    r.onsuccess=function(){res(r.result)}; r.onerror=function(){res(null)}; r.onblocked=function(){res(null)};
   }catch(e){res(null)}
 });}
-function tx(store,mode,fn){return new Promise(function(res,rej){
-  var t=db.transaction(store,mode), out, r=fn(t.objectStore(store));
+function idb(mode,fn){return new Promise(function(res,rej){
+  var t=db.transaction('blobs',mode), out, r=fn(t.objectStore('blobs'));
   if(r) r.onsuccess=function(){out=r.result};
   t.oncomplete=function(){res(out)}; t.onerror=t.onabort=function(){rej(t.error||new Error('storage'))};
 });}
-function put(store,val,key){
-  if(!db){mem[store].set(key!==undefined?key:val.id,val);return Promise.resolve();}
-  return tx(store,'readwrite',function(s){return key!==undefined?s.put(val,key):s.put(val)});
-}
-function get(store,key){return db?tx(store,'readonly',function(s){return s.get(key)}):Promise.resolve(mem[store].get(key));}
-function del(store,key){ if(!db){mem[store].delete(key);return Promise.resolve();} return tx(store,'readwrite',function(s){return s.delete(key)});}
-function all(store){return db?tx(store,'readonly',function(s){return s.getAll()}):Promise.resolve(Array.from(mem[store].values()));}
+function bput(k,v){ if(!db){memBlobs.set(k,v);return Promise.resolve();} return idb('readwrite',function(s){return s.put(v,k)}); }
+function bget(k){ return db?idb('readonly',function(s){return s.get(k)}):Promise.resolve(memBlobs.get(k)); }
+function bdel(k){ if(!db){memBlobs.delete(k);return Promise.resolve();} return idb('readwrite',function(s){return s.delete(k)}); }
+function bkeys(){ return db?idb('readonly',function(s){return s.getAllKeys()}):Promise.resolve(Array.from(memBlobs.keys())); }
 
-/* ---------- state ---------- */
-var events=[], photos=[];           // all events, all photo records
-var originals=new Map();            // photo id -> File, this session only
-var cur=null;                       // {ev, list, idx}
-var manageId=null, imgUrl=null, gridUrls=[], albumTarget=250;
+/* ---------- shared state (from the family database) ---------- */
+var events=[], photos=new Map(), settings={albumTarget:250}, lastNow=0, ver=0, listCache={ver:-1,map:{}};
+var originals=new Map(), localHas=new Set(), pos=LS.get('ap.pos',{}), pending=LS.get('ap.q',[]);
+var ready=false, cur=null, manageId=null, imgUrl=null;
 
 function pid(evId,name){return evId+'|'+name.toLowerCase()}
-function ofEvent(id){return photos.filter(function(p){return p.event===id}).sort(function(a,b){return coll.compare(a.name,b.name)})}
-function stat(id){var l=photos.filter(function(p){return p.event===id});
-  return {total:l.length,kept:l.filter(function(p){return p.kept}).length,seen:l.filter(function(p){return p.seen}).length,
-          fresh:l.filter(function(p){return p.kept&&!p.onDisk}).length};}
+function ofEvent(id){
+  if(listCache.ver!==ver) listCache={ver:ver,map:{}};
+  var m=listCache.map;
+  if(!m[id]){var l=[]; photos.forEach(function(p){if(p.event===id) l.push(p)}); l.sort(function(a,b){return coll.compare(a.name,b.name)}); m[id]=l;}
+  return m[id];
+}
+function chosen(p){return (p.onDisk||p.votes.size>0)&&!p.dropped}
+function totalChosen(){var n=0; photos.forEach(function(p){if(chosen(p)) n++}); return n}
+function target(){return parseInt(settings.albumTarget,10)||250}
+function applyLocal(a){
+  var p=photos.get(a.id); if(!p) return;
+  if(a.t==='vote'){ if(a.on) p.votes.add(a.voter); else p.votes.delete(a.voter); }
+  else { p.dropped=!!a.on; p.droppedBy=a.on?a.by:''; }
+}
+function applyState(d,full){
+  events=d.events||[];
+  (d.settings||[]).forEach(function(s){settings[s.key]=s.value});
+  if(full) photos=new Map();
+  else { var live=new Set(events.map(function(e){return e.id})); photos.forEach(function(p,id){ if(!live.has(p.event)) photos.delete(id); }); }
+  (d.photos||[]).forEach(function(r){ var old=photos.get(r[0]);
+    photos.set(r[0],{id:r[0],event:r[1],name:r[2],onDisk:!!r[3],dropped:!!r[4],droppedBy:r[5]||'',votes:old?old.votes:new Set()}); });
+  (d.votes||[]).forEach(function(v){ var p=photos.get(v[0]); if(!p) return; if(full||v[2]) p.votes.add(v[1]); else p.votes.delete(v[1]); });
+  if(d.now) lastNow=d.now;
+  ver++;
+  pending.forEach(applyLocal);
+}
+
+/* ---------- talking to the server ---------- */
+function base(){return String(cfg.s||'').replace(/\/+$/,'')}
+function api(path,opt){
+  var u=base()+path+(path.indexOf('?')<0?'?':'&')+'k='+enc(cfg.k);
+  return fetch(u,opt||{}).then(function(r){
+    if(r.ok) return r.json();
+    return r.json().catch(function(){return {}}).then(function(j){throw new Error(j.error||('error '+r.status))});
+  });
+}
+function post(path,body){return api(path,{method:'POST',body:JSON.stringify(body)})}
+function thumbUrl(id){return base()+'/api/thumb?id='+enc(id)+'&k='+enc(cfg.k)}
+function setNet(ok,msg){
+  var b=$('#netBanner'); b.hidden=ok;
+  if(!ok) b.textContent='Not connected ('+msg+'). Picks made now stay on this device and are sent when the connection is back.';
+}
+var flushing=false;
+async function flush(){
+  if(flushing) return; flushing=true;
+  try{
+    while(pending.length){
+      var a=pending[0];
+      await post(a.t==='vote'?'/api/vote':'/api/drop',a);
+      pending.shift(); LS.set('ap.q',pending);
+    }
+  }catch(e){ setNet(false,e.message); }
+  flushing=false;
+}
+async function loadFull(){
+  var d=await api('/api/state'); applyState(d,true);
+  bput('state',JSON.stringify(d)).catch(noop);
+}
+async function poll(){
+  if(!ready||document.visibilityState!=='visible'||loading) return;
+  await flush();
+  try{ var d=await api('/api/changes?since='+lastNow); applyState(d,false); setNet(true); refreshView(); }
+  catch(e){ setNet(false,e.message); }
+}
+setInterval(poll,20000);
+document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible') poll(); });
 
 var toastT;
-function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2600);}
-function show(id){['home','manage','viewer','review'].forEach(function(v){$('#'+v).hidden=(v!==id)});window.scrollTo(0,0);}
+function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true},2800);}
+var VIEWS=['setup','home','manage','viewer','review'];
+function show(id){VIEWS.forEach(function(v){$('#'+v).hidden=(v!==id)});window.scrollTo(0,0);}
+function visible(id){return !$('#'+id).hidden}
+function refreshView(){
+  if(visible('home')) renderHome();
+  else if(visible('manage')) renderManage();
+  else if(visible('viewer')&&cur){ var l=ofEvent(cur.ev.id), i=l.indexOf(photos.get(cur.pid)); if(i>=0) cur.idx=i; if(l.length) paintMeta(); }
+}
 
-/* ---------- online progress (GitHub, branch "data") ---------- */
-var GH='https://api.github.com/repos/builtonleverage/album-shortlist/contents/progress.json';
-var token='', sha=null, syncT=null, dirty=false, lastPushed='', lastSync=null, remote=null, remoteErr='';
-try{token=localStorage.getItem('ghToken')||''}catch(e){}
-function hdr(){var h={'Accept':'application/vnd.github+json'}; if(token) h.Authorization='Bearer '+token; return h;}
-function b64(t){return btoa(unescape(encodeURIComponent(t)))}
-function snapshot(){
-  return {albumTarget:albumTarget,events:events.map(function(ev){var l=ofEvent(ev.id);
-    return {name:ev.name,total:l.length,seen:l.filter(function(p){return p.seen}).length,
-      kept:l.filter(function(p){return p.kept}).map(function(p){return p.name}),
-      onDisk:l.filter(function(p){return p.kept&&p.onDisk}).map(function(p){return p.name}),
-      removed:l.filter(function(p){return !p.kept&&p.onDisk}).map(function(p){return p.name})};})};
+/* ---------- setup ---------- */
+function needSetup(msg){
+  $('#suName').value=cfg.me||''; $('#suKey').value=cfg.k||''; $('#suServer').value=cfg.s||'';
+  var m=$('#suMsg'); m.hidden=!msg; m.textContent=msg||'';
+  show('setup');
 }
-async function fetchRemote(){
-  var r=await fetch(GH+'?ref=data&t='+Date.now(),{headers:hdr(),cache:'no-store'});
-  if(!r.ok) throw new Error(r.status===404?'not found or private':'error '+r.status);
-  var j=await r.json(); sha=j.sha;
-  return JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\s/g,'')))));
-}
-async function pushNow(){
-  clearTimeout(syncT); syncT=null;
-  if(!token||!dirty) return;
-  var snap=snapshot(), body0=JSON.stringify(snap);
-  if(body0===lastPushed){dirty=false;return;}
-  snap.updated=new Date().toISOString();
-  try{
-    if(!sha){ try{await fetchRemote()}catch(e){} }
-    var send=function(){var b={message:'Update progress',branch:'data',content:b64(JSON.stringify(snap,null,1))}; if(sha) b.sha=sha;
-      return fetch(GH,{method:'PUT',headers:hdr(),body:JSON.stringify(b)});};
-    var r=await send();
-    if(r.status===409||r.status===422){ sha=null; try{await fetchRemote()}catch(e){} r=await send(); }
-    if(!r.ok) throw new Error(r.status===401||r.status===403?'token not accepted':'error '+r.status);
-    sha=(await r.json()).content.sha; lastPushed=body0; dirty=false; lastSync=new Date(); remoteErr='';
-  }catch(e){ remoteErr='Could not save online: '+e.message+'. It will try again.'; }
-  renderSync();
-}
-function queueSync(){ dirty=true; if(token&&!syncT) syncT=setTimeout(pushNow,60000); }
-function flushSync(){ if(dirty&&token) pushNow(); }
-document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden') flushSync(); });
-function renderSync(){
-  var picker=events.length>0, msg=$('#sMsg'), v=$('#sView');
-  $('#album').hidden=!picker&&!!remote;
-  $('#sToken').placeholder=token?'Token saved on this device':'Paste token';
-  if(picker){
-    $('#sRefresh').hidden=true; v.innerHTML=''; $('#sText').hidden=true;
-    msg.textContent=remoteErr||(!token?'Paste a GitHub token below to save progress online, so it can be checked from any phone or computer.':
-      (lastSync?'Saved online at '+lastSync.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'.':'Progress is saved online about a minute after each change.'));
-    return;
-  }
-  $('#sRefresh').hidden=false;
-  if(!remote){ msg.textContent=remoteErr?'Could not load the saved progress ('+remoteErr+').':'Loading saved progress…'; v.innerHTML=''; return; }
-  var tot=remote.events.reduce(function(a,e){return a+e.kept.length},0);
-  msg.innerHTML='From the picking iPad, updated '+esc(remote.updated?new Date(remote.updated).toLocaleString():'never')+'.';
-  v.innerHTML='<div class="stats"><b>'+tot+'</b> of '+(remote.albumTarget||250)+' photos chosen for the album</div>'+
-    remote.events.map(function(e){return '<div class="row"><span>'+esc(e.name)+'</span><span class="stats muted">'+e.kept.length+' chosen · '+e.seen+' of '+e.total+' seen</span></div>'}).join('')+
-    (remote.events.length?'<div class="btns"><button id="sNames">Show chosen file names</button></div>':'<span class="muted">Nothing has been picked yet.</span>');
-}
-function loadRemote(){ return fetchRemote().then(function(d){remote=d;remoteErr='';}).catch(function(e){remoteErr=e.message;}).then(renderSync); }
-$('#sRefresh').addEventListener('click',function(){remote=null;remoteErr='';renderSync();loadRemote();});
-$('#sView').addEventListener('click',function(e){
-  if(!e.target.closest('#sNames')||!remote) return;
-  var x=$('#sText'); x.value=remote.events.map(function(ev){return ev.name+' ('+ev.kept.length+')\n'+ev.kept.join('\n')}).join('\n\n'); x.hidden=false;
+$('#suForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  var s=$('#suServer').value.trim(); if(s&&!/^https?:\/\//i.test(s)) s='https://'+s;
+  cfg={s:s.replace(/\/+$/,''),k:$('#suKey').value.trim(),me:$('#suName').value.trim().slice(0,40)};
+  if(!cfg.s||!cfg.k||!cfg.me) return;
+  LS.set('ap.cfg',cfg); start();
 });
-$('#sForm').addEventListener('submit',function(e){
-  e.preventDefault(); var t=$('#sToken').value.trim(); if(!t) return;
-  token=t; try{localStorage.setItem('ghToken',t)}catch(err){} $('#sToken').value=''; sha=null;
-  toast('Token saved'); if(events.length){dirty=true;pushNow();} else loadRemote();
+$('#meChange').addEventListener('click',function(){needSetup('')});
+$('#signOut').addEventListener('click',function(){ cfg={s:cfg.s,k:'',me:''}; LS.set('ap.cfg',cfg); ready=false; needSetup(''); });
+$('#linkCopy').addEventListener('click',function(){
+  var link=location.origin+location.pathname+'#s='+enc(cfg.s)+'&k='+enc(cfg.k);
+  (navigator.clipboard?navigator.clipboard.writeText(link):Promise.reject()).then(function(){toast('Family link copied')})
+    .catch(function(){var b=$('#linkBox');b.value=link;b.hidden=false;b.focus();b.select();toast('Select the link and copy it')});
 });
 
 /* ---------- home ---------- */
-function totalKept(){return photos.filter(function(p){return p.kept}).length}
 function renderAlbum(){
-  var k=totalKept(), left=albumTarget-k, p=$('#aPill');
-  $('#aBar').style.width=Math.min(100,Math.round(k/albumTarget*100))+'%';
-  $('#aLine').innerHTML='<b>'+k+'</b> of '+albumTarget+' photos chosen';
+  var k=totalChosen(), t=target(), left=t-k, p=$('#aPill');
+  $('#aBar').style.width=Math.min(100,Math.round(k/t*100))+'%';
+  $('#aLine').innerHTML='<b>'+k+'</b> of '+t+' photos chosen';
   p.className='pill'+(left===0?' done':'');
   p.textContent=left>0?left+' more to choose':(left===0?'Album complete':(-left)+' more than needed');
 }
-$('#aEdit').addEventListener('click',function(){var f=$('#aForm');f.hidden=!f.hidden;$('#aTarget').value=albumTarget;});
+$('#aEdit').addEventListener('click',function(){var f=$('#aForm');f.hidden=!f.hidden;$('#aTarget').value=target();});
 $('#aForm').addEventListener('submit',function(e){
   e.preventDefault(); var n=parseInt($('#aTarget').value,10); if(!(n>0)) return;
-  albumTarget=n; put('blobs',{target:n},'settings').catch(function(){}); $('#aForm').hidden=true; renderAlbum(); toast('Album total saved'); queueSync();
+  settings.albumTarget=n; $('#aForm').hidden=true; renderAlbum();
+  post('/api/settings',{albumTarget:n}).then(function(){toast('Album total saved')}).catch(function(err){toast('Could not save the total: '+err.message)});
 });
 function renderHome(){
-  renderAlbum(); renderSync();
+  $('#meName').textContent=cfg.me;
+  renderAlbum();
   var box=$('#events');
-  if(!events.length){box.innerHTML='<div class="card"><strong>No events yet.</strong><span class="muted">Add the first event below, for example Mehndi, then load its photos from the disk.</span></div>';return;}
+  if(!ready){box.innerHTML='<div class="card muted">Loading…</div>';return;}
+  if(!events.length){box.innerHTML='<div class="card"><strong>No events yet.</strong><span class="muted">Open “Set up and family link” below and add the first event, for example Mehndi. Then load its photos from the disk on the iPad.</span></div>';return;}
+  var st={}; events.forEach(function(e){st[e.id]={total:0,kept:0,mine:0}});
+  photos.forEach(function(p){var s=st[p.event]; if(!s) return; s.total++; if(chosen(p)) s.kept++; if(p.votes.has(cfg.me)) s.mine++;});
   box.innerHTML=events.map(function(ev){
-    var s=stat(ev.id), pct=s.total?Math.round(s.seen/s.total*100):0;
-    var done=s.total&&s.seen>=s.total;
-    var line='<b>'+s.kept+'</b> chosen';
+    var s=st[ev.id], at=Math.min(pos[ev.id]||0,Math.max(0,s.total-1)), started=(ev.id in pos)&&s.total>0;
+    var pct=started?Math.round((at+1)/s.total*100):0;
     return '<div class="card"><div class="row"><h2>'+esc(ev.name)+'</h2>'+
-      (done?'<span class="pill done">All photos seen</span>':(s.total?'<span class="pill">'+(s.total-s.seen)+' left to see</span>':'<span class="pill">No photos loaded</span>'))+'</div>'+
+      (s.total?'<span class="pill">'+(started?'At photo '+(at+1)+' of '+s.total:s.total+' photos')+'</span>':'<span class="pill">No photos loaded</span>')+'</div>'+
       '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
-      '<div class="row"><span class="stats">'+line+' <span class="muted">· '+s.seen+' of '+s.total+' seen</span></span>'+
+      '<div class="row"><span class="stats"><b>'+s.kept+'</b> chosen <span class="muted">· '+s.mine+' kept by you</span></span>'+
       '<span class="btns"><button class="quiet" data-manage="'+esc(ev.id)+'">Set up</button>'+
-      (s.total?'<button class="primary go" data-open="'+esc(ev.id)+'">'+(s.seen?'Continue':'Start')+'</button>':'')+'</span></div></div>';
+      (s.total?'<button class="primary go" data-open="'+esc(ev.id)+'">'+(started?'Continue':'Start')+'</button>':'')+'</span></div></div>';
   }).join('');
 }
 $('#events').addEventListener('click',function(e){
@@ -349,10 +399,9 @@ $('#events').addEventListener('click',function(e){
 $('#newEvent').addEventListener('submit',function(e){
   e.preventDefault();
   var name=$('#evName').value.trim(); if(!name) return;
-  var ev={id:'e'+Date.now().toString(36),name:name,pos:0};
-  events.push(ev); put('events',ev).catch(function(){});
-  $('#evName').value='';
-  openManage(ev.id);
+  post('/api/events',{name:name}).then(function(ev){
+    events.push({id:ev.id,name:ev.name}); $('#evName').value=''; openManage(ev.id);
+  }).catch(function(err){toast('Could not add the event: '+err.message)});
 });
 
 /* ---------- manage ---------- */
@@ -363,9 +412,10 @@ function openManage(id){
   renderManage(); show('manage');
 }
 function renderManage(){
-  var s=stat(manageId);
-  $('#mStats').textContent=s.total+' photos loaded · '+s.kept+' kept · '+s.fresh+' new picks not yet on the disk';
-  renderExport(); queueSync();
+  var l=ofEvent(manageId), kept=l.filter(chosen), fresh=kept.filter(function(p){return !p.onDisk});
+  var local=l.filter(function(p){return localHas.has(p.id)}).length;
+  $('#mStats').textContent=l.length+' photos · '+kept.length+' chosen · '+fresh.length+' new picks not yet on the disk · '+local+' large previews on this device';
+  renderExport();
 }
 $('#mBack').addEventListener('click',function(){renderHome();show('home')});
 
@@ -373,7 +423,7 @@ function makePreviews(file){
   var url=URL.createObjectURL(file), img=new Image();
   img.src=url;
   return img.decode().then(function(){
-    var out={}, jobs=[['p',2048,0.85],['t',360,0.7]], chain=Promise.resolve();
+    var out={}, jobs=[['p',2048,0.85],['t',640,0.6]], chain=Promise.resolve();
     jobs.forEach(function(j){chain=chain.then(function(){
       var s=Math.min(1,j[1]/Math.max(img.naturalWidth,img.naturalHeight));
       var c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.naturalWidth*s)); c.height=Math.max(1,Math.round(img.naturalHeight*s));
@@ -390,43 +440,46 @@ var loading=false;
 $('#mAdd').addEventListener('change',async function(){
   var files=Array.from(this.files||[]).sort(function(a,b){return coll.compare(a.name,b.name)}); this.value='';
   if(!files.length||loading) return; loading=true;
-  var evId=manageId, added=0, relinked=0, bad=0, full=false;
+  var evId=manageId, added=0, relinked=0, bad=0, failed=0, localFull=false, lastErr='';
   var prog=$('#mProg'), txt=$('#mProgText'); prog.hidden=false; txt.hidden=false; prog.max=files.length;
-  var have=new Set(photos.filter(function(p){return p.event===evId}).map(function(p){return p.id}));
-  var evNow=events.find(function(x){return x.id===evId}), rk=new Set(), rd=new Set();
-  ((remote&&remote.events)||[]).forEach(function(e){ if(evNow&&e.name.toLowerCase()===evNow.name.toLowerCase()){
-    e.kept.forEach(function(n){rk.add(n.toLowerCase())}); (e.onDisk||[]).forEach(function(n){rd.add(n.toLowerCase())}); }});
   for(var i=0;i<files.length;i++){
     var f=files[i], id=pid(evId,f.name);
     prog.value=i+1; txt.textContent='Preparing '+(i+1)+' of '+files.length+': '+f.name;
+    var inCloud=photos.has(id), local=localHas.has(id);
+    if(inCloud&&(local||!db||localFull)){ originals.set(id,f); relinked++; continue; }
+    var pv;
+    try{ pv=await makePreviews(f); }catch(e){ bad++; continue; }
     originals.set(id,f);
-    if(have.has(id)){relinked++;continue;}
+    if(db&&!local&&!localFull){ try{ await bput(id+'#p',pv.p); localHas.add(id); }catch(e){ localFull=true; } }
+    if(inCloud){ relinked++; continue; }
     try{
-      var pv=await makePreviews(f);
-      var lk=f.name.toLowerCase(), rec={id:id,event:evId,name:f.name,kept:rk.has(lk),onDisk:rd.has(lk),seen:false};
-      try{ await put('blobs',pv.p,id+'#p'); await put('blobs',pv.t,id+'#t'); await put('photos',rec); }
-      catch(e){ full=true; originals.delete(id); break; }
-      photos.push(rec); have.add(id); added++;
-    }catch(e){ bad++; originals.delete(id); }
+      await api('/api/photo?event='+enc(evId)+'&name='+enc(f.name),{method:'POST',body:pv.t});
+      photos.set(id,{id:id,event:evId,name:f.name,onDisk:false,dropped:false,droppedBy:'',votes:new Set()}); ver++; added++;
+    }catch(e){ failed++; lastErr=e.message; if(failed>=5&&!added){ break; } }
   }
   prog.hidden=true; loading=false;
-  txt.textContent=(full?'Storage on this iPad is full for this app. Loaded '+added+' photos before stopping. Finish and remove another event, then load the rest. ':'Added '+added+' photos. ')+
-    (relinked?relinked+' were already loaded. ':'')+(bad?bad+' files could not be shown (RAW files or videos are skipped).':'');
+  txt.textContent='Added '+added+' photos. '+(relinked?relinked+' were already loaded. ':'')+
+    (bad?bad+' files could not be shown (RAW files or videos are skipped). ':'')+
+    (failed?failed+' could not be sent ('+lastErr+'). Choose the folder again to retry them. ':'')+
+    (localFull?'Storage on this iPad is full, so the rest show as small previews here.':'');
   renderManage();
 });
 
+async function markOnDisk(list){
+  for(var i=0;i<list.length;i+=80){
+    var part=list.slice(i,i+80);
+    await post('/api/mark',{ids:part.map(function(p){return p.id})});
+    part.forEach(function(p){p.onDisk=true});
+  }
+}
 $('#mMark').addEventListener('change',async function(){
   var files=Array.from(this.files||[]); this.value=''; if(!files.length) return;
-  var list=photos.filter(function(p){return p.event===manageId});
-  var byName=new Map(), byBase=new Map(), base=function(n){return n.toLowerCase().replace(/\.[^.]+$/,'')};
-  list.forEach(function(p){byName.set(p.name.toLowerCase(),p); byBase.set(base(p.name),p)});
-  var hit=0, miss=0;
-  for(var i=0;i<files.length;i++){
-    var p=byName.get(files[i].name.toLowerCase())||byBase.get(base(files[i].name));
-    if(!p){miss++;continue;}
-    p.kept=true;p.onDisk=true;hit++; try{await put('photos',p)}catch(e){}
-  }
-  toast(hit+' marked as already shortlisted'+(miss?', '+miss+' not found in the loaded photos':''));
+  var byName=new Map(), byBase=new Map(), stem=function(n){return n.toLowerCase().replace(/\.[^.]+$/,'')};
+  ofEvent(manageId).forEach(function(p){byName.set(p.name.toLowerCase(),p); byBase.set(stem(p.name),p)});
+  var hits=[], miss=0;
+  files.forEach(function(f){var p=byName.get(f.name.toLowerCase())||byBase.get(stem(f.name)); if(p){ if(!p.onDisk&&hits.indexOf(p)<0) hits.push(p); } else miss++;});
+  try{ await markOnDisk(hits); toast(hits.length+' marked as already shortlisted'+(miss?', '+miss+' not found in the loaded photos':'')); }
+  catch(e){ toast('Could not mark them: '+e.message); }
   renderManage();
 });
 
@@ -435,11 +488,11 @@ function canShareFiles(){
   try{return !!(navigator.canShare&&navigator.canShare({files:[new File(['x'],'x.jpg',{type:'image/jpeg'})]}));}catch(e){return false}
 }
 function renderExport(){
-  var fresh=ofEvent(manageId).filter(function(p){return p.kept&&!p.onDisk});
+  var fresh=ofEvent(manageId).filter(function(p){return chosen(p)&&!p.onDisk});
   var info=$('#xInfo'), btns=$('#xBtns'); btns.innerHTML='';
-  if(!fresh.length){info.textContent='No new picks to save. Everything kept is already on the disk.';return;}
+  if(!fresh.length){info.textContent='No new picks to save. Everything chosen is already on the disk.';return;}
   if(!canShareFiles()){
-    info.textContent=fresh.length+' new picks. This page cannot save files to the disk from here. Use the file name list below and copy those files on a computer.';
+    info.textContent=fresh.length+' new picks. This device cannot save files to the disk. Use the file name list below and copy those files on a computer, or do this step on the iPad.';
     return;
   }
   var missing=fresh.filter(function(p){return !originals.has(p.id)}).length;
@@ -453,11 +506,10 @@ function renderExport(){
       var b=document.createElement('button'); b.className='primary';
       b.textContent='Save photos '+(from+1)+' to '+(from+part.length);
       b.addEventListener('click',function(){
-        var files=part.map(function(p){return originals.get(p.id)});
-        navigator.share({files:files}).then(async function(){
-          for(var k=0;k<part.length;k++){part[k].onDisk=true; try{await put('photos',part[k])}catch(e){}}
-          toast(part.length+' photos marked as saved'); renderManage();
-        }).catch(function(err){ if(err&&err.name!=='AbortError') toast('Could not open the share sheet. Try fewer photos or use the file name list.'); });
+        navigator.share({files:part.map(function(p){return originals.get(p.id)})}).then(function(){
+          return markOnDisk(part).then(function(){toast(part.length+' photos marked as saved')},function(e){toast('Saved, but could not record it: '+e.message)});
+        }).catch(function(err){ if(err&&err.name!=='AbortError') toast('Could not open the share sheet. Try again or use the file name list.'); })
+          .then(renderManage);
       });
       btns.appendChild(b);
     })(fresh.slice(i,i+CHUNK),i);
@@ -465,7 +517,7 @@ function renderExport(){
 }
 $('#xList').addEventListener('click',function(){
   var l=ofEvent(manageId), ev=events.find(function(x){return x.id===manageId});
-  var fresh=l.filter(function(p){return p.kept&&!p.onDisk}), gone=l.filter(function(p){return !p.kept&&p.onDisk});
+  var fresh=l.filter(function(p){return chosen(p)&&!p.onDisk}), gone=l.filter(function(p){return p.dropped&&p.onDisk});
   var t=ev.name+'\n\nCopy these into the Shortlisted folder ('+fresh.length+'):\n'+fresh.map(function(p){return p.name}).join('\n');
   if(gone.length) t+='\n\nRemove these from the Shortlisted folder ('+gone.length+'):\n'+gone.map(function(p){return p.name}).join('\n');
   var x=$('#xText'); x.value=t; x.hidden=false; $('#xCopy').hidden=false;
@@ -478,74 +530,84 @@ $('#xCopy').addEventListener('click',function(){
 
 /* ---------- delete ---------- */
 var armed=false;
-function delArm(on){armed=on;$('#mDelete').textContent=on?'Tap again to remove':'Remove event';}
+function delArm(on){armed=on;$('#mDelete').textContent=on?'Tap again to remove for everyone':'Remove event';}
 $('#mDelete').addEventListener('click',async function(){
   if(!armed){delArm(true);return;}
-  var id=manageId, l=photos.filter(function(p){return p.event===id});
-  for(var i=0;i<l.length;i++){ try{await del('blobs',l[i].id+'#p');await del('blobs',l[i].id+'#t');await del('photos',l[i].id);}catch(e){} originals.delete(l[i].id); }
-  try{await del('events',id)}catch(e){}
-  photos=photos.filter(function(p){return p.event!==id}); events=events.filter(function(e){return e.id!==id});
-  renderHome(); show('home'); toast('Event removed from this iPad'); queueSync();
+  var id=manageId, l=ofEvent(id).slice();
+  try{ await post('/api/events/delete',{id:id}); }catch(e){ toast('Could not remove the event: '+e.message); delArm(false); return; }
+  for(var i=0;i<l.length;i++){ if(localHas.has(l[i].id)){ try{await bdel(l[i].id+'#p')}catch(e){} localHas.delete(l[i].id); } originals.delete(l[i].id); photos.delete(l[i].id); }
+  events=events.filter(function(e){return e.id!==id}); delete pos[id]; LS.set('ap.pos',pos); ver++;
+  renderHome(); show('home'); toast('Event removed');
 });
 
 /* ---------- viewer ---------- */
 function openViewer(id){
   var ev=events.find(function(x){return x.id===id}), list=ofEvent(id); if(!ev||!list.length) return;
-  cur={ev:ev,list:list,idx:Math.min(ev.pos||0,list.length-1)};
+  cur={ev:ev,idx:Math.min(pos[id]||0,list.length-1),pid:null};
   $('#vTitle').textContent=ev.name; show('viewer'); paint();
 }
-function keptCount(){return cur.list.filter(function(p){return p.kept}).length}
 function paintMeta(){
-  var p=cur.list[cur.idx], k=keptCount();
-  $('#vPos').innerHTML='Photo <b>'+(cur.idx+1)+'</b> of '+cur.list.length;
+  var list=ofEvent(cur.ev.id), p=list[cur.idx]; if(!p) return;
+  var who=Array.from(p.votes), mine=p.votes.has(cfg.me), ch=chosen(p);
+  $('#vPos').innerHTML='Photo <b>'+(cur.idx+1)+'</b> of '+list.length;
   $('#vName').textContent=p.name;
-  $('#vCount').innerHTML='Album: <b>'+totalKept()+'</b> of '+albumTarget+' chosen';
-  $('#vReview').textContent='My picks ('+k+')';
-  $('#vKeep').classList.toggle('on',!!p.kept);
-  $('#vKeep').textContent=p.kept?'✓ Kept (tap to remove)':'Keep this photo';
-  $('#stage').classList.toggle('kept',!!p.kept);
-  $('#vBadge').hidden=!p.kept;
-  $('#vBadge').textContent=p.onDisk?'✓ Already in the album folder':'✓ Kept';
+  $('#vCount').innerHTML='Album: <b>'+totalChosen()+'</b> of '+target()+' chosen';
+  $('#vReview').textContent='Picks ('+list.filter(chosen).length+')';
+  $('#vKeep').classList.toggle('on',mine);
+  $('#vKeep').textContent=mine?'✓ You kept this (tap to undo)':'Keep this photo';
+  $('#stage').classList.toggle('kept',ch);
+  var b=$('#vBadge'); b.hidden=!(ch||p.dropped); b.classList.toggle('dropped',p.dropped);
+  b.textContent=p.dropped?('Dropped by '+(p.droppedBy||'someone')):
+    ((who.length?'✓ Kept by '+who.join(', '):'')+(p.onDisk?(who.length?' · in the album folder':'✓ In the album folder'):''));
+  var d=$('#vDrop'); d.hidden=!(p.onDisk||who.length); d.textContent=p.dropped?'Bring back':'Drop for everyone';
 }
 function paint(){
   $('#vEnd').hidden=true;
-  var p=cur.list[cur.idx], at=cur.idx;
-  paintMeta();
-  get('blobs',p.id+'#p').then(function(buf){
-    if(!cur||cur.idx!==at) return;
-    if(imgUrl) URL.revokeObjectURL(imgUrl);
-    imgUrl=buf?URL.createObjectURL(new Blob([buf],{type:'image/jpeg'})):null;
-    var im=$('#vImg'); if(imgUrl) im.src=imgUrl; else im.removeAttribute('src');
-    im.alt=p.name;
-  }).catch(function(){});
-  if(!p.seen){p.seen=true;put('photos',p).catch(function(){});}
-  if(cur.ev.pos!==cur.idx){cur.ev.pos=cur.idx;put('events',cur.ev).catch(function(){});}
+  var list=ofEvent(cur.ev.id), p=list[cur.idx], at=p.id, im=$('#vImg');
+  cur.pid=p.id; paintMeta(); im.alt=p.name;
+  if(localHas.has(p.id)){
+    bget(p.id+'#p').then(function(buf){
+      if(!cur||cur.pid!==at) return;
+      if(imgUrl) URL.revokeObjectURL(imgUrl);
+      imgUrl=buf?URL.createObjectURL(new Blob([buf],{type:'image/jpeg'})):null;
+      im.src=imgUrl||thumbUrl(p.id);
+    }).catch(function(){im.src=thumbUrl(p.id)});
+  } else {
+    im.src=thumbUrl(p.id);
+    var nx=list[cur.idx+1]; if(nx&&!localHas.has(nx.id)){ var pre=new Image(); pre.src=thumbUrl(nx.id); }
+  }
+  pos[cur.ev.id]=cur.idx; LS.set('ap.pos',pos);
 }
 function step(d){
-  if(!cur||$('#viewer').hidden) return;
-  if(!$('#vEnd').hidden){ if(d<0){$('#vEnd').hidden=true;} return; }
-  var n=cur.idx+d;
+  if(!cur||!visible('viewer')) return;
+  if(!$('#vEnd').hidden){ if(d<0) $('#vEnd').hidden=true; return; }
+  var list=ofEvent(cur.ev.id), n=cur.idx+d;
   if(n<0){toast('This is the first photo');return;}
-  if(n>=cur.list.length){
-    var k=keptCount();
-    $('#vEndText').textContent='You chose '+k+' from '+cur.ev.name+'. Album total: '+totalKept()+' of '+albumTarget+'.';
+  if(n>=list.length){
+    $('#vEndText').textContent=list.filter(chosen).length+' chosen from '+cur.ev.name+'. Album total: '+totalChosen()+' of '+target()+'.';
     $('#vEnd').hidden=false; return;
   }
   cur.idx=n; paint();
 }
+function act(a){ applyLocal(a); pending.push(a); LS.set('ap.q',pending); paintMeta(); flush(); }
 function toggleKeep(){
   if(!cur||!$('#vEnd').hidden) return;
-  var p=cur.list[cur.idx]; p.kept=!p.kept; put('photos',p).catch(function(){toast('Could not save this pick')}); paintMeta(); queueSync();
+  var p=ofEvent(cur.ev.id)[cur.idx];
+  act({t:'vote',id:p.id,voter:cfg.me,on:!p.votes.has(cfg.me)});
 }
+$('#vDrop').addEventListener('click',function(){
+  var p=ofEvent(cur.ev.id)[cur.idx];
+  act({t:'drop',id:p.id,by:cfg.me,on:!p.dropped});
+});
 $('#vPrev').addEventListener('click',function(){step(-1)});
 $('#vNext').addEventListener('click',function(){step(1)});
 $('#vKeep').addEventListener('click',toggleKeep);
 $('#vEndBack').addEventListener('click',function(){$('#vEnd').hidden=true});
 $('#vEndReview').addEventListener('click',openReview);
 $('#vReview').addEventListener('click',openReview);
-$('#vBack').addEventListener('click',function(){cur=null;renderHome();show('home');flushSync();});
+$('#vBack').addEventListener('click',function(){cur=null;renderHome();show('home')});
 document.addEventListener('keydown',function(e){
-  if($('#viewer').hidden) return;
+  if(!visible('viewer')) return;
   if(e.key==='ArrowRight') step(1); else if(e.key==='ArrowLeft') step(-1);
   else if(e.key===' '&&e.target.tagName!=='BUTTON'){e.preventDefault();toggleKeep();}
 });
@@ -562,17 +624,16 @@ document.addEventListener('keydown',function(e){
 /* ---------- review ---------- */
 function openReview(){
   if(!cur) return;
-  var kept=cur.list.filter(function(p){return p.kept});
+  var list=ofEvent(cur.ev.id), kept=list.filter(chosen);
   $('#rTitle').textContent='Picks for '+cur.ev.name;
-  $('#rStats').textContent=kept.length+' chosen from this event · album total '+totalKept()+' of '+albumTarget+'. Tap a photo to open it.';
+  $('#rStats').textContent=kept.length+' chosen from this event · album total '+totalChosen()+' of '+target()+'. Tap a photo to open it.';
   var g=$('#rGrid'); g.innerHTML=kept.length?'':'<p class="muted">No photos chosen yet.</p>';
-  gridUrls.forEach(function(u){URL.revokeObjectURL(u)}); gridUrls=[];
   kept.forEach(function(p){
-    var b=document.createElement('button'), im=document.createElement('img');
-    b.setAttribute('aria-label','Open '+p.name); im.alt=''; im.loading='lazy'; b.appendChild(im);
-    if(p.onDisk){var t=document.createElement('span');t.className='tag';t.textContent='on disk';b.appendChild(t);}
-    get('blobs',p.id+'#t').then(function(buf){ if(!buf) return; var u=URL.createObjectURL(new Blob([buf],{type:'image/jpeg'})); gridUrls.push(u); im.src=u; }).catch(function(){});
-    b.addEventListener('click',function(){cur.idx=cur.list.indexOf(p);show('viewer');paint();});
+    var b=document.createElement('button'), im=document.createElement('img'), t=document.createElement('span');
+    b.setAttribute('aria-label','Open '+p.name); im.alt=''; im.loading='lazy'; im.src=thumbUrl(p.id);
+    t.className='tag'; t.textContent=(p.votes.size?p.votes.size+(p.votes.size===1?' pick':' picks'):'')+(p.onDisk?(p.votes.size?' · ':'')+'on disk':'');
+    b.appendChild(im); b.appendChild(t);
+    b.addEventListener('click',function(){var i=ofEvent(cur.ev.id).indexOf(p); if(i>=0) cur.idx=i; show('viewer'); paint();});
     g.appendChild(b);
   });
   show('review');
@@ -580,15 +641,24 @@ function openReview(){
 $('#rBack').addEventListener('click',function(){show('viewer');paint()});
 
 /* ---------- start ---------- */
+async function start(){
+  if(!cfg.s||!cfg.k||!cfg.me){ needSetup(''); return; }
+  ready=false; show('home'); renderHome();
+  try{ await loadFull(); setNet(true); }
+  catch(e){
+    if(e.message==='wrong password'){ needSetup('The password was not accepted.'); return; }
+    var c=null; try{ c=await bget('state'); }catch(x){}
+    if(!c){ needSetup('Could not reach the server ('+e.message+'). Check the server address and the internet connection.'); return; }
+    try{ applyState(JSON.parse(c),true); }catch(x){}
+    setNet(false,e.message);
+  }
+  ready=true; renderHome(); flush();
+}
 openDB().then(async function(d){
   db=d;
-  if(db){ try{events=await all('events'); photos=await all('photos');}catch(e){db=null;events=[];photos=[];} }
-  if(!db) $('#memBanner').hidden=false;
-  try{var st=await get('blobs','settings'); if(st&&st.target>0) albumTarget=st.target;}catch(e){}
+  try{ (await bkeys()).forEach(function(k){ if(typeof k==='string'&&k.slice(-2)==='#p') localHas.add(k.slice(0,-2)); }); }catch(e){}
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
-  events.sort(function(a,b){return a.id<b.id?-1:1});
-  renderHome();
-  loadRemote();
+  start();
 });
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}
 })();
