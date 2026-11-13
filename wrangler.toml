@@ -2,6 +2,12 @@ name = "album-shortlist"
 main = "worker/worker.js"
 compatibility_date = "2025-01-01"
 
+# The same Worker serves the app (static files in this folder) and the API under /api/.
+[assets]
+directory = "."
+binding = "ASSETS"
+run_worker_first = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "album-shortlist"

@@ -131,7 +131,11 @@ export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
-    if (url.pathname === '/') return new Response('Album Picker API is running.', { headers: CORS });
+    if (url.pathname === '/api/ping') return json({ ok: true, service: 'album-picker' });
+    if (!url.pathname.startsWith('/api/')) {
+      // Everything outside /api/ is the app itself (static files), when deployed with them.
+      return env.ASSETS ? env.ASSETS.fetch(req) : new Response('Album Picker API is running.', { headers: CORS });
+    }
     if (!env.DB) return json({ error: 'database binding DB is missing' }, 500);
     if (!env.KEY || url.searchParams.get('k') !== env.KEY) return json({ error: 'wrong password' }, 401);
     try {

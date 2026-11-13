@@ -216,7 +216,7 @@ details.card>*+*{margin-top:14px}
 <script>
 (function(){
 'use strict';
-var DEFAULT_API='https://album-shortlist.builtonleverage.workers.dev';
+var DEFAULT_API=/\.workers\.dev$/.test(location.hostname)?location.origin:'https://album-shortlist.builtonleverage.workers.dev';
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
 var enc=encodeURIComponent, noop=function(){};
