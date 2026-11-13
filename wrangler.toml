@@ -1,6 +1,8 @@
 name = "album-shortlist"
 main = "worker/worker.js"
 compatibility_date = "2025-01-01"
+# Keep variables set in the Cloudflare dashboard when deploying from here.
+keep_vars = true
 
 # The same Worker serves the app (static files in this folder) and the API under /api/.
 [assets]
