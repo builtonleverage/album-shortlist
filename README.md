@@ -13,7 +13,7 @@ How photos flow:
 
 ## Deploying the server
 
-Cloudflare dashboard > Workers & Pages > Create > import this repository, with root directory `worker` and deploy command `npx wrangler deploy`. `wrangler.toml` already binds the D1 database as `DB`.
+In the Cloudflare dashboard, open the `album-shortlist` Worker > Settings > Build, and connect this repository (branch `main`, deploy command `npx wrangler deploy`, root directory left as `/`). `wrangler.toml` points at `worker/worker.js` and binds the D1 database as `DB`.
 
 Then add a secret named `KEY` (Settings > Variables and Secrets) holding the family password.
 

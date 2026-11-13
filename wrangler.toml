@@ -1,5 +1,5 @@
 name = "album-shortlist"
-main = "worker.js"
+main = "worker/worker.js"
 compatibility_date = "2025-01-01"
 
 [[d1_databases]]
