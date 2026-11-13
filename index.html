@@ -104,10 +104,18 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
     <p class="muted" style="margin:0">Choose an event, look at each photo, and press Keep on the ones for the album.</p>
   </div>
   <div id="memBanner" class="banner" hidden>This browser is not saving progress. Keep this page open until the shortlist is saved, or open the page in Safari directly.</div>
+  <div id="album" class="card">
+    <div class="row"><h2>Whole album</h2><span id="aPill" class="pill"></span></div>
+    <div class="bar"><i id="aBar"></i></div>
+    <div class="row"><span id="aLine" class="stats"></span><button id="aEdit" class="quiet">Change total</button></div>
+    <form id="aForm" class="new" hidden>
+      <label for="aTarget">Photos needed for the whole album<input id="aTarget" type="number" min="1" inputmode="numeric"></label>
+      <button class="primary" type="submit">Save</button>
+    </form>
+  </div>
   <div id="events" class="events"></div>
   <form id="newEvent" class="new card">
     <label for="evName">New event name<input id="evName" type="text" placeholder="Mehndi" autocomplete="off" required></label>
-    <label for="evTarget">Photos needed for album<input id="evTarget" type="number" min="0" inputmode="numeric" placeholder="60"></label>
     <button class="primary" type="submit">Add event</button>
   </form>
 </main>
@@ -129,14 +137,7 @@ textarea{width:100%;min-height:120px;background:var(--ink);color:var(--text);bor
       <label class="pick" for="mMark">Choose shortlisted photos<input id="mMark" type="file" multiple></label>
     </div>
     <div class="step">
-      <h3>3. Photos needed for the album</h3>
-      <div class="btns" style="align-items:end">
-        <div class="field" style="flex:0 1 160px"><label for="mTarget">Target</label><input id="mTarget" type="number" min="0" inputmode="numeric"></div>
-        <button id="mTargetSave">Save target</button>
-      </div>
-    </div>
-    <div class="step">
-      <h3>4. Save the new picks to the disk</h3>
+      <h3>3. Save the new picks to the disk</h3>
       <p id="xInfo" class="muted small" style="margin:0"></p>
       <div id="xBtns" class="btns"></div>
       <div class="btns"><button id="xList">Show file name list</button><button id="xCopy" hidden>Copy list</button></div>
@@ -219,7 +220,7 @@ function all(store){return db?tx(store,'readonly',function(s){return s.getAll()}
 var events=[], photos=[];           // all events, all photo records
 var originals=new Map();            // photo id -> File, this session only
 var cur=null;                       // {ev, list, idx}
-var manageId=null, imgUrl=null, gridUrls=[];
+var manageId=null, imgUrl=null, gridUrls=[], albumTarget=250;
 
 function pid(evId,name){return evId+'|'+name.toLowerCase()}
 function ofEvent(id){return photos.filter(function(p){return p.event===id}).sort(function(a,b){return coll.compare(a.name,b.name)})}
@@ -232,15 +233,29 @@ function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(
 function show(id){['home','manage','viewer','review'].forEach(function(v){$('#'+v).hidden=(v!==id)});window.scrollTo(0,0);}
 
 /* ---------- home ---------- */
+function totalKept(){return photos.filter(function(p){return p.kept}).length}
+function renderAlbum(){
+  var k=totalKept(), left=albumTarget-k, p=$('#aPill');
+  $('#aBar').style.width=Math.min(100,Math.round(k/albumTarget*100))+'%';
+  $('#aLine').innerHTML='<b>'+k+'</b> of '+albumTarget+' photos chosen';
+  p.className='pill'+(left===0?' done':'');
+  p.textContent=left>0?left+' more to choose':(left===0?'Album complete':(-left)+' more than needed');
+}
+$('#aEdit').addEventListener('click',function(){var f=$('#aForm');f.hidden=!f.hidden;$('#aTarget').value=albumTarget;});
+$('#aForm').addEventListener('submit',function(e){
+  e.preventDefault(); var n=parseInt($('#aTarget').value,10); if(!(n>0)) return;
+  albumTarget=n; put('blobs',{target:n},'settings').catch(function(){}); $('#aForm').hidden=true; renderAlbum(); toast('Album total saved');
+});
 function renderHome(){
+  renderAlbum();
   var box=$('#events');
   if(!events.length){box.innerHTML='<div class="card"><strong>No events yet.</strong><span class="muted">Add the first event below, for example Mehndi, then load its photos from the disk.</span></div>';return;}
   box.innerHTML=events.map(function(ev){
-    var s=stat(ev.id), tgt=ev.target||0, pct=tgt?Math.min(100,Math.round(s.kept/tgt*100)):(s.total?Math.round(s.seen/s.total*100):0);
-    var done=tgt&&s.kept>=tgt;
-    var line=tgt?('<b>'+s.kept+'</b> of '+tgt+' chosen'):('<b>'+s.kept+'</b> chosen');
+    var s=stat(ev.id), pct=s.total?Math.round(s.seen/s.total*100):0;
+    var done=s.total&&s.seen>=s.total;
+    var line='<b>'+s.kept+'</b> chosen';
     return '<div class="card"><div class="row"><h2>'+esc(ev.name)+'</h2>'+
-      (done?'<span class="pill done">Target reached</span>':(s.total?'<span class="pill">'+(s.total-s.seen)+' left to see</span>':'<span class="pill">No photos loaded</span>'))+'</div>'+
+      (done?'<span class="pill done">All photos seen</span>':(s.total?'<span class="pill">'+(s.total-s.seen)+' left to see</span>':'<span class="pill">No photos loaded</span>'))+'</div>'+
       '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
       '<div class="row"><span class="stats">'+line+' <span class="muted">· '+s.seen+' of '+s.total+' seen</span></span>'+
       '<span class="btns"><button class="quiet" data-manage="'+esc(ev.id)+'">Set up</button>'+
@@ -255,16 +270,16 @@ $('#events').addEventListener('click',function(e){
 $('#newEvent').addEventListener('submit',function(e){
   e.preventDefault();
   var name=$('#evName').value.trim(); if(!name) return;
-  var ev={id:'e'+Date.now().toString(36),name:name,target:parseInt($('#evTarget').value,10)||0,pos:0};
+  var ev={id:'e'+Date.now().toString(36),name:name,pos:0};
   events.push(ev); put('events',ev).catch(function(){});
-  $('#evName').value='';$('#evTarget').value='';
+  $('#evName').value='';
   openManage(ev.id);
 });
 
 /* ---------- manage ---------- */
 function openManage(id){
   manageId=id; var ev=events.find(function(x){return x.id===id}); if(!ev) return;
-  $('#mTitle').textContent='Set up: '+ev.name; $('#mTarget').value=ev.target||'';
+  $('#mTitle').textContent='Set up: '+ev.name;
   $('#xText').hidden=true; $('#xCopy').hidden=true; delArm(false);
   renderManage(); show('manage');
 }
@@ -274,10 +289,6 @@ function renderManage(){
   renderExport();
 }
 $('#mBack').addEventListener('click',function(){renderHome();show('home')});
-$('#mTargetSave').addEventListener('click',function(){
-  var ev=events.find(function(x){return x.id===manageId}); ev.target=parseInt($('#mTarget').value,10)||0;
-  put('events',ev).catch(function(){}); toast('Target saved');
-});
 
 function makePreviews(file){
   var url=URL.createObjectURL(file), img=new Image();
@@ -403,10 +414,10 @@ function openViewer(id){
 }
 function keptCount(){return cur.list.filter(function(p){return p.kept}).length}
 function paintMeta(){
-  var p=cur.list[cur.idx], k=keptCount(), tgt=cur.ev.target||0;
+  var p=cur.list[cur.idx], k=keptCount();
   $('#vPos').innerHTML='Photo <b>'+(cur.idx+1)+'</b> of '+cur.list.length;
   $('#vName').textContent=p.name;
-  $('#vCount').innerHTML='<b>'+k+'</b>'+(tgt?' of '+tgt:'')+' chosen';
+  $('#vCount').innerHTML='Album: <b>'+totalKept()+'</b> of '+albumTarget+' chosen';
   $('#vReview').textContent='My picks ('+k+')';
   $('#vKeep').classList.toggle('on',!!p.kept);
   $('#vKeep').textContent=p.kept?'✓ Kept (tap to remove)':'Keep this photo';
@@ -434,8 +445,8 @@ function step(d){
   var n=cur.idx+d;
   if(n<0){toast('This is the first photo');return;}
   if(n>=cur.list.length){
-    var k=keptCount(), tgt=cur.ev.target||0;
-    $('#vEndText').textContent='You chose '+k+(tgt?' of the '+tgt+' needed':'')+' for '+cur.ev.name+'.';
+    var k=keptCount();
+    $('#vEndText').textContent='You chose '+k+' from '+cur.ev.name+'. Album total: '+totalKept()+' of '+albumTarget+'.';
     $('#vEnd').hidden=false; return;
   }
   cur.idx=n; paint();
@@ -469,9 +480,9 @@ document.addEventListener('keydown',function(e){
 /* ---------- review ---------- */
 function openReview(){
   if(!cur) return;
-  var kept=cur.list.filter(function(p){return p.kept}), tgt=cur.ev.target||0;
+  var kept=cur.list.filter(function(p){return p.kept});
   $('#rTitle').textContent='Picks for '+cur.ev.name;
-  $('#rStats').textContent=kept.length+(tgt?' of '+tgt:'')+' chosen'+(tgt&&kept.length>tgt?' · '+(kept.length-tgt)+' more than needed':'')+'. Tap a photo to open it.';
+  $('#rStats').textContent=kept.length+' chosen from this event · album total '+totalKept()+' of '+albumTarget+'. Tap a photo to open it.';
   var g=$('#rGrid'); g.innerHTML=kept.length?'':'<p class="muted">No photos chosen yet.</p>';
   gridUrls.forEach(function(u){URL.revokeObjectURL(u)}); gridUrls=[];
   kept.forEach(function(p){
@@ -491,6 +502,7 @@ openDB().then(async function(d){
   db=d;
   if(db){ try{events=await all('events'); photos=await all('photos');}catch(e){db=null;events=[];photos=[];} }
   if(!db) $('#memBanner').hidden=false;
+  try{var st=await get('blobs','settings'); if(st&&st.target>0) albumTarget=st.target;}catch(e){}
   try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
   events.sort(function(a,b){return a.id<b.id?-1:1});
   renderHome();
