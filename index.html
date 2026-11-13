@@ -115,7 +115,7 @@ details.card>*+*{margin-top:14px}
   <form id="suForm" class="card">
     <div class="field"><label for="suName">Your name</label><input id="suName" type="text" autocomplete="given-name" required></div>
     <div class="field"><label for="suKey">Family password</label><input id="suKey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" required></div>
-    <div class="field"><label for="suServer">Server address</label><input id="suServer" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://album-shortlist.yourname.workers.dev" required></div>
+    <div class="field" id="suServerField"><label for="suServer">Server address</label><input id="suServer" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://album-shortlist.yourname.workers.dev" required></div>
     <p id="suMsg" class="small" style="margin:0;color:var(--warn)" hidden></p>
     <button class="primary" type="submit">Continue</button>
   </form>
@@ -216,7 +216,7 @@ details.card>*+*{margin-top:14px}
 <script>
 (function(){
 'use strict';
-var DEFAULT_API='';   // the Worker address, once known
+var DEFAULT_API='https://album-shortlist.builtonleverage.workers.dev';
 var $=function(s){return document.querySelector(s)};
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};
 var enc=encodeURIComponent, noop=function(){};
@@ -229,6 +229,7 @@ var LS={
 
 /* ---------- who and where ---------- */
 var cfg=LS.get('ap.cfg',{s:DEFAULT_API,k:'',me:''});
+if(!cfg.s) cfg.s=DEFAULT_API;
 (function(){
   var h=location.hash.replace(/^#/,''); if(!h) return;
   try{var q=new URLSearchParams(h); if(q.get('s')) cfg.s=q.get('s'); if(q.get('k')) cfg.k=q.get('k'); LS.set('ap.cfg',cfg); history.replaceState(null,'',location.pathname);}catch(e){}
@@ -341,6 +342,7 @@ function refreshView(){
 function needSetup(msg){
   $('#suName').value=cfg.me||''; $('#suKey').value=cfg.k||''; $('#suServer').value=cfg.s||'';
   var m=$('#suMsg'); m.hidden=!msg; m.textContent=msg||'';
+  $('#suServerField').hidden=!!DEFAULT_API&&cfg.s===DEFAULT_API&&!/server/.test(msg||'');
   show('setup');
 }
 $('#suForm').addEventListener('submit',function(e){
@@ -351,7 +353,7 @@ $('#suForm').addEventListener('submit',function(e){
   LS.set('ap.cfg',cfg); start();
 });
 $('#meChange').addEventListener('click',function(){needSetup('')});
-$('#signOut').addEventListener('click',function(){ cfg={s:cfg.s,k:'',me:''}; LS.set('ap.cfg',cfg); ready=false; needSetup(''); });
+$('#signOut').addEventListener('click',function(){ cfg={s:cfg.s||DEFAULT_API,k:'',me:''}; LS.set('ap.cfg',cfg); ready=false; needSetup(''); });
 $('#linkCopy').addEventListener('click',function(){
   var link=location.origin+location.pathname+'#s='+enc(cfg.s)+'&k='+enc(cfg.k);
   (navigator.clipboard?navigator.clipboard.writeText(link):Promise.reject()).then(function(){toast('Family link copied')})
