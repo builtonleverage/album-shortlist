@@ -131,13 +131,14 @@ export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
     const url = new URL(req.url);
-    if (url.pathname === '/api/ping') return json({ ok: true, service: 'album-picker' });
+    if (url.pathname === '/api/ping') return json({ ok: true, service: 'album-picker', passwordSet: !!env.KEY, passwordLength: env.KEY ? String(env.KEY).length : 0, database: !!env.DB });
     if (!url.pathname.startsWith('/api/')) {
       // Everything outside /api/ is the app itself (static files), when deployed with them.
       return env.ASSETS ? env.ASSETS.fetch(req) : new Response('Album Picker API is running.', { headers: CORS });
     }
     if (!env.DB) return json({ error: 'database binding DB is missing' }, 500);
-    if (!env.KEY || url.searchParams.get('k') !== env.KEY) return json({ error: 'wrong password' }, 401);
+    if (!env.KEY) return json({ error: 'the server has no KEY secret set' }, 500);
+    if (url.searchParams.get('k') !== String(env.KEY).trim()) return json({ error: 'wrong password' }, 401);
     try {
       return await handle(req, env, url);
     } catch (e) {
