@@ -425,36 +425,54 @@ function renderManage(){
 }
 $('#mBack').addEventListener('click',function(){renderHome();show('home')});
 
+function timeout(p,ms,what){return new Promise(function(res,rej){var t=setTimeout(function(){rej(new Error(what+' took too long'))},ms); p.then(function(v){clearTimeout(t);res(v)},function(e){clearTimeout(t);rej(e)});});}
+function loadSource(file){
+  var url=URL.createObjectURL(file), img=new Image(); img.src=url;
+  return timeout(img.decode(),45000,'opening the photo').then(function(){
+    return {src:img,w:img.naturalWidth,h:img.naturalHeight,done:function(){URL.revokeObjectURL(url)}};
+  },function(err){
+    URL.revokeObjectURL(url);
+    if(!window.createImageBitmap) throw err;
+    return timeout(createImageBitmap(file),45000,'opening the photo').then(function(bm){
+      return {src:bm,w:bm.width,h:bm.height,done:function(){if(bm.close) bm.close()}};
+    },function(){throw err});
+  });
+}
 function makePreviews(file){
-  var url=URL.createObjectURL(file), img=new Image();
-  img.src=url;
-  return img.decode().then(function(){
+  return loadSource(file).then(function(im){
     var out={}, jobs=[['p',2048,0.85],['t',640,0.6]], chain=Promise.resolve();
     jobs.forEach(function(j){chain=chain.then(function(){
-      var s=Math.min(1,j[1]/Math.max(img.naturalWidth,img.naturalHeight));
-      var c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.naturalWidth*s)); c.height=Math.max(1,Math.round(img.naturalHeight*s));
-      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      var s=Math.min(1,j[1]/Math.max(im.w,im.h));
+      var c=document.createElement('canvas'); c.width=Math.max(1,Math.round(im.w*s)); c.height=Math.max(1,Math.round(im.h*s));
+      c.getContext('2d').drawImage(im.src,0,0,c.width,c.height);
       return new Promise(function(r){c.toBlob(r,'image/jpeg',j[2])}).then(function(b){
-        c.width=c.height=0; if(!b) throw new Error('encode');
+        c.width=c.height=0; if(!b) throw new Error('could not make a preview');
         return b.arrayBuffer().then(function(buf){out[j[0]]=buf});});
     })});
-    return chain.then(function(){return out});
-  }).finally(function(){URL.revokeObjectURL(url)});
+    return chain.then(function(){im.done();return out},function(e){im.done();throw e});
+  });
 }
 
 var loading=false;
+$('#mAdd').addEventListener('click',function(){ if(loading) return; var t=$('#mProgText'); t.hidden=false; t.textContent='Waiting for the iPad to copy the selected photos from the disk. This line changes when the app receives them.'; });
+$('#mAdd').addEventListener('cancel',function(){ if(loading) return; $('#mProgText').textContent='No files were received. The selection was cancelled, or the iPad gave up copying. Try fewer photos.'; });
 $('#mAdd').addEventListener('change',async function(){
   var files=Array.from(this.files||[]).sort(function(a,b){return coll.compare(a.name,b.name)}); this.value='';
-  if(!files.length||loading) return; loading=true;
-  var evId=manageId, added=0, relinked=0, bad=0, failed=0, localFull=false, lastErr='';
-  var prog=$('#mProg'), txt=$('#mProgText'); prog.hidden=false; txt.hidden=false; prog.max=files.length;
+  var prog=$('#mProg'), txt=$('#mProgText'); txt.hidden=false;
+  if(loading){ txt.textContent='A batch is still being prepared. Wait for it to finish.'; return; }
+  if(!files.length){ txt.textContent='The iPad did not hand over any files. Try again with fewer photos selected.'; return; }
+  loading=true;
+  var evId=manageId, added=0, relinked=0, bad=0, failed=0, localFull=false, lastErr='', badWhy='', crash='';
+  prog.hidden=false; prog.max=files.length; prog.value=0;
+  txt.textContent='Received '+files.length+' files (first: '+files[0].name+', '+(files[0].size/1048576).toFixed(1)+' MB). Preparing…';
+  try{
   for(var i=0;i<files.length;i++){
     var f=files[i], id=pid(evId,f.name);
     prog.value=i+1; txt.textContent='Preparing '+(i+1)+' of '+files.length+': '+f.name;
     var inCloud=photos.has(id), local=localHas.has(id);
     if(inCloud&&(local||!db||localFull)){ originals.set(id,f); relinked++; continue; }
     var pv;
-    try{ pv=await makePreviews(f); }catch(e){ bad++; continue; }
+    try{ pv=await makePreviews(f); }catch(e){ bad++; if(!badWhy) badWhy=f.name+': '+((e&&(e.message||e.name))||'not a photo the browser can open'); continue; }
     originals.set(id,f);
     if(db&&!local&&!localFull){ try{ await bput(id+'#p',pv.p); localHas.add(id); }catch(e){ localFull=true; } }
     if(inCloud){ relinked++; continue; }
@@ -463,9 +481,10 @@ $('#mAdd').addEventListener('change',async function(){
       photos.set(id,{id:id,event:evId,name:f.name,onDisk:false,dropped:false,droppedBy:'',votes:new Set()}); ver++; added++;
     }catch(e){ failed++; lastErr=e.message; if(failed>=5&&!added){ break; } }
   }
+  }catch(e){ crash=(e&&(e.message||e.name))||'unknown error'; }
   prog.hidden=true; loading=false;
-  txt.textContent='Added '+added+' photos. '+(relinked?relinked+' were already loaded. ':'')+
-    (bad?bad+' files could not be shown (RAW files or videos are skipped). ':'')+
+  txt.textContent=(crash?'Stopped early because of an error ('+crash+'). ':'')+'Added '+added+' photos. '+(relinked?relinked+' were already loaded. ':'')+
+    (bad?bad+' files could not be opened ('+badWhy+'). RAW files and videos cannot be shown. ':'')+
     (failed?failed+' could not be sent ('+lastErr+'). Choose the folder again to retry them. ':'')+
     (localFull?'Storage on this iPad is full, so the rest show as small previews here.':'');
   renderManage();
