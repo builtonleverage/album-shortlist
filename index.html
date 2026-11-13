@@ -165,6 +165,10 @@ details.card>*+*{margin-top:14px}
       <h3>2. Mark photos already shortlisted</h3>
       <p class="muted small" style="margin:0">Open this event's Shortlisted folder on the disk and select everything in it. Photos with matching file names count as chosen and are not saved again.</p>
       <label class="pick" for="mMark">Choose shortlisted photos<input id="mMark" type="file" multiple></label>
+      <p class="muted small" style="margin:0">The iPad copies the selected files before the app sees them, which can take minutes for large photos. The faster way is to paste just the file names, one per line.</p>
+      <textarea id="mNames" placeholder="DSC09116&#10;DSC09118&#10;DSC09121" aria-label="Shortlisted file names, one per line"></textarea>
+      <div class="btns"><button id="mNamesGo">Mark these names</button></div>
+      <p id="mMarkMsg" class="small" style="margin:0" hidden></p>
     </div>
     <div class="step">
       <h3>3. Save the new picks to the disk</h3>
@@ -474,15 +478,32 @@ async function markOnDisk(list){
     part.forEach(function(p){p.onDisk=true});
   }
 }
-$('#mMark').addEventListener('change',async function(){
-  var files=Array.from(this.files||[]); this.value=''; if(!files.length) return;
-  var byName=new Map(), byBase=new Map(), stem=function(n){return n.toLowerCase().replace(/\.[^.]+$/,'')};
+async function markNames(names){
+  var byName=new Map(), byBase=new Map(), stem=function(n){return n.toLowerCase().replace(/\.[^.\/]+$/,'')};
   ofEvent(manageId).forEach(function(p){byName.set(p.name.toLowerCase(),p); byBase.set(stem(p.name),p)});
-  var hits=[], miss=0;
-  files.forEach(function(f){var p=byName.get(f.name.toLowerCase())||byBase.get(stem(f.name)); if(p){ if(!p.onDisk&&hits.indexOf(p)<0) hits.push(p); } else miss++;});
-  try{ await markOnDisk(hits); toast(hits.length+' marked as already shortlisted'+(miss?', '+miss+' not found in the loaded photos':'')); }
-  catch(e){ toast('Could not mark them: '+e.message); }
+  var hits=[], already=0, miss=[];
+  names.forEach(function(n){
+    n=String(n).trim().split('/').pop(); if(!n) return;
+    var p=byName.get(n.toLowerCase())||byBase.get(stem(n));
+    if(!p){ miss.push(n); return; }
+    if(p.onDisk) already++; else if(hits.indexOf(p)<0) hits.push(p);
+  });
+  var m=$('#mMarkMsg'); m.hidden=false;
+  try{
+    await markOnDisk(hits);
+    m.textContent=hits.length+' marked as already shortlisted'+(already?', '+already+' were marked before':'')+
+      (miss.length?'. '+miss.length+' not found among this event\'s loaded photos (load them in step 1 first): '+miss.slice(0,8).join(', ')+(miss.length>8?'…':''):'.');
+  }catch(e){ m.textContent='Could not mark them: '+e.message; }
   renderManage();
+}
+$('#mMark').addEventListener('change',function(){
+  var files=Array.from(this.files||[]); this.value=''; if(!files.length) return;
+  markNames(files.map(function(f){return f.name}));
+});
+$('#mNamesGo').addEventListener('click',function(){
+  var names=$('#mNames').value.split(/[\n,;\t]+/).filter(function(x){return x.trim()});
+  if(!names.length){ toast('Paste the file names first'); return; }
+  markNames(names);
 });
 
 /* ---------- export ---------- */
